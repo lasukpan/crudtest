@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>CRUD демо (Flask + SQLite)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+        }
+        h1 {
+            text-align: center;
+        }
+        form {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 6px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+        .task {
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+        }
+        .task-done {
+            background-color: #e1ffe1;
+            text-decoration: line-through;
+        }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .task-actions button {
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+<h1>Список задач</h1>
+
+<form id="task-form">
+    <h2 id="form-title">Добавить задачу</h2>
+    <!-- скрытое поле для id при редактировании -->
+    <input type="hidden" id="task-id">
+
+    <label>
+        Заголовок:
+        <input type="text" id="task-title" required>
+    </label>
+
+    <label>
+        Описание:
+        <textarea id="task-description" rows="3"></textarea>
+    </label>
+
+    <label>
+        <input type="checkbox" id="task-is-done">
+        Выполнено
+    </label>
+
+    <button type="submit">Сохранить</button>
+    <button type="button" id="reset-btn">Очистить форму</button>
+</form>
+
+<h2>Текущие задачи</h2>
+<div id="tasks-container">
+    <!-- Список задач будет подгружаться сюда -->
+</div>
+
+<script>
+    const form = document.getElementById('task-form');
+    const formTitle = document.getElementById('form-title');
+    const inputId = document.getElementById('task-id');
+    const inputTitle = document.getElementById('task-title');
+    const inputDescription = document.getElementById('task-description');
+    const inputIsDone = document.getElementById('task-is-done');
+    const resetBtn = document.getElementById('reset-btn');
+    const tasksContainer = document.getElementById('tasks-container');
+
+    // Загрузка задач при загрузке страницы
+    document.addEventListener('DOMContentLoaded', loadTasks);
+
+    async function loadTasks() {
+        const res = await fetch('/api/tasks');
+        const tasks = await res.json();
+        renderTasks(tasks);
+    }
+
+    function renderTasks(tasks) {
+        tasksContainer.innerHTML = '';
+        if (tasks.length === 0) {
+            tasksContainer.textContent = 'Пока задач нет.';
+            return;
+        }
+
+        tasks.forEach(task => {
+            const div = document.createElement('div');
+            div.className = 'task' + (task.is_done ? ' task-done' : '');
+            div.dataset.id = task.id;
+
+            const header = document.createElement('div');
+            header.className = 'task-header';
+
+            const title = document.createElement('strong');
+            title.textContent = `#${task.id} ${task.title}`;
+
+            const actions = document.createElement('div');
+            actions.className = 'task-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.textContent = 'Редактировать';
+            editBtn.onclick = () => fillFormForEdit(task);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Удалить';
+            deleteBtn.onclick = () => deleteTask(task.id);
+
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+
+            header.appendChild(title);
+            header.appendChild(actions);
+
+            const desc = document.createElement('p');
+            desc.textContent = task.description || '(без описания)';
+
+            const status = document.createElement('small');
+            status.textContent = task.is_done ? 'Статус: выполнено' : 'Статус: не выполнено';
+
+            div.appendChild(header);
+            div.appendChild(desc);
+            div.appendChild(status);
+
+            tasksContainer.appendChild(div);
+        });
+    }
+
+    function fillFormForEdit(task) {
+        inputId.value = task.id;
+        inputTitle.value = task.title;
+        inputDescription.value = task.description || '';
+        inputIsDone.checked = task.is_done;
+        formTitle.textContent = 'Редактировать задачу';
+    }
+
+    function resetForm() {
+        inputId.value = '';
+        inputTitle.value = '';
+        inputDescription.value = '';
+        inputIsDone.checked = false;
+        formTitle.textContent = 'Добавить задачу';
+    }
+
+    resetBtn.addEventListener('click', resetForm);
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const id = inputId.value;
+        const payload = {
+            title: inputTitle.value,
+            description: inputDescription.value,
+            is_done: inputIsDone.checked
+        };
+
+        if (!payload.title.trim()) {
+            alert('Поле "Заголовок" обязательно');
+            return;
+        }
+
+        if (id) {
+            // Обновление
+            await fetch(`/api/tasks/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            // Создание
+            await fetch('/api/tasks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+        }
+
+        resetForm();
+        await loadTasks();
+    });
+
+    async function deleteTask(id) {
+        if (!confirm('Удалить задачу #' + id + '?')) return;
+        await fetch(`/api/tasks/${id}`, {
+            method: 'DELETE'
+        });
+        await loadTasks();
+    }
+</script>
+</body>
+</html>
